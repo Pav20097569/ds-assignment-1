@@ -6,7 +6,7 @@ import * as custom from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { generateBatch } from "../shared/util";
-import { movies } from "../seed/formula1";
+import { drivers } from "../seed/drivers";
 
 export class F1APIStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
