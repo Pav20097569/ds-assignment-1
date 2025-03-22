@@ -5,6 +5,7 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as custom from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as cognito from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 import { generateBatch } from "../shared/util";
 import { drivers } from "../seed/drivers";
@@ -30,7 +31,7 @@ export class F1ApiStack extends cdk.Stack {
       bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
+        REGION: this.region,
       },
     });
 
@@ -41,7 +42,7 @@ export class F1ApiStack extends cdk.Stack {
       bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
+        REGION: this.region,
       },
     });
 
@@ -52,7 +53,7 @@ export class F1ApiStack extends cdk.Stack {
       bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
+        REGION: this.region,
       },
     });
 
@@ -63,7 +64,7 @@ export class F1ApiStack extends cdk.Stack {
       bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
+        REGION: this.region,
       },
     });
 
@@ -74,8 +75,25 @@ export class F1ApiStack extends cdk.Stack {
       bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
+        REGION: this.region,
       },
+    });
+
+    // Cognito User Pool for Authorization
+    const userPool = new cognito.UserPool(this, "F1ApiUserPool", {
+      selfSignUpEnabled: true, // Allow users to sign up
+      autoVerify: { email: true }, // Auto-verify email addresses
+      signInAliases: { email: true }, // Allow email as a sign-in alias
+    });
+
+    const userPoolClient = new cognito.UserPoolClient(this, "F1ApiUserPoolClient", {
+      userPool,
+      generateSecret: false, // Don't generate a client secret
+    });
+
+    // API Gateway Authorizer
+    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "F1ApiAuthorizer", {
+      cognitoUserPools: [userPool],
     });
 
     // API Gateway
@@ -95,14 +113,20 @@ export class F1ApiStack extends cdk.Stack {
 
     // Add methods to the resources
     driversResource.addMethod("GET", new apigateway.LambdaIntegration(getAllDriversFn));
-    driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn));
+    driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn), {
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizer,
+    });
     driversByTeamResource.addMethod("GET", new apigateway.LambdaIntegration(getDriversByTeamFn));
     driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn), {
       requestParameters: {
         "method.request.querystring.language": false, // Optional query parameter
       },
     });
-    driverResource.addMethod("PUT", new apigateway.LambdaIntegration(updateDriverFn));
+    driverResource.addMethod("PUT", new apigateway.LambdaIntegration(updateDriverFn), {
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizer,
+    });
 
     // Seed Data for DynamoDB Table
     new custom.AwsCustomResource(this, "DriversDDBInitData", {
@@ -142,6 +166,17 @@ export class F1ApiStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
       description: "The URL of the API Gateway endpoint",
+    });
+
+    // Output the Cognito User Pool ID and Client ID
+    new cdk.CfnOutput(this, "UserPoolId", {
+      value: userPool.userPoolId,
+      description: "The ID of the Cognito User Pool",
+    });
+
+    new cdk.CfnOutput(this, "UserPoolClientId", {
+      value: userPoolClient.userPoolClientId,
+      description: "The ID of the Cognito User Pool Client",
     });
   }
 }
