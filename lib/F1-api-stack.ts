@@ -61,23 +61,39 @@ export class F1ApiStack extends cdk.Stack {
       },
     });
 
+    const getDriversByTeamFn = new lambdanode.NodejsFunction(this, "GetDriversByTeamFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/getDriversByTeam.ts`, // Specify the entry file
+      bundling: {
+        forceDockerBundling: false, // Disable Docker bundling
+      },
+      environment: {
+        TABLE_NAME: driversTable.tableName,
+        REGION: "eu-west-1",
+      },
+    });
+
     // API Gateway
     const api = new apigateway.RestApi(this, "F1Api", {
       restApiName: "Formula 1 API",
       description: "API for managing Formula 1 drivers and teams.",
     });
 
-    // driver's' resource
-    const driversResource = api.root.addResource("drivers");
-    //resource and method for the GET /drivers/{team}/{driverId} endpoint
-    const driverResource = driversResource
-      .addResource("{team}")
-      .addResource("{driverId}");
+// Add the /drivers resource
+const driversResource = api.root.addResource("drivers");
 
-    driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn));
-    driversResource.addMethod("GET", new apigateway.LambdaIntegration(getAllDriversFn));
-    driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn));
+// Add the /drivers/{team} resource
+const driversByTeamResource = driversResource.addResource("{team}");
 
+// Add the /drivers/{team}/{driverId} resource
+const driverResource = driversByTeamResource.addResource("{driverId}");
+
+// Add methods to the resources
+driversResource.addMethod("GET", new apigateway.LambdaIntegration(getAllDriversFn));
+driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn));
+driversByTeamResource.addMethod("GET", new apigateway.LambdaIntegration(getDriversByTeamFn));
+driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn));
     // Seed Data for DynamoDB Table
     new custom.AwsCustomResource(this, "DriversDDBInitData", {
       onCreate: {
@@ -99,7 +115,7 @@ export class F1ApiStack extends cdk.Stack {
     driversTable.grantReadData(getDriverByIdFn);
     driversTable.grantReadData(getAllDriversFn);
     driversTable.grantWriteData(addDriverFn);
-
+    driversTable.grantReadData(getDriversByTeamFn);
     // Output the API Gateway URL
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
