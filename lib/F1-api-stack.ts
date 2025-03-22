@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import * as lambdanode from "aws-cdk-lib/aws-lambda-nodejs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as custom from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { generateBatch } from "../shared/util";
@@ -24,16 +25,29 @@ export class F1ApiStack extends cdk.Stack {
     const getDriverByIdFn = new lambdanode.NodejsFunction(this, "GetDriverByIdFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/getDriverById.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
+      entry: `${__dirname}/../lambdas/getDriverById.ts`, // Specify the entry file
+      bundling: {
+        forceDockerBundling: false, // Disable Docker bundling
+      },
       environment: {
         TABLE_NAME: driversTable.tableName,
         REGION: "eu-west-1",
       },
     });
 
+    // API Gateway
+    const api = new apigateway.RestApi(this, "F1Api", {
+      restApiName: "Formula 1 API",
+      description: "API for managing Formula 1 drivers and teams.",
+    });
 
+    // Add a resource and method for the GET /drivers/{team}/{driverId} endpoint
+    const driverResource = api.root
+      .addResource("drivers")
+      .addResource("{team}")
+      .addResource("{driverId}");
+
+    driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn));
 
     // Seed Data for DynamoDB Table
     new custom.AwsCustomResource(this, "DriversDDBInitData", {
@@ -55,5 +69,10 @@ export class F1ApiStack extends cdk.Stack {
     // Permissions
     driversTable.grantReadData(getDriverByIdFn);
 
+    // Output the API Gateway URL
+    new cdk.CfnOutput(this, "ApiUrl", {
+      value: api.url,
+      description: "The URL of the API Gateway endpoint",
+    });
   }
 }
