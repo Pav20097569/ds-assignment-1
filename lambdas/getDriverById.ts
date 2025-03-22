@@ -1,8 +1,10 @@
 import { Handler } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate";
 
 const ddbDocClient = createDDbDocClient();
+const translateClient = new TranslateClient({ region: process.env.REGION });
 
 export const handler: Handler = async (event, context) => {
   try {
@@ -11,10 +13,12 @@ export const handler: Handler = async (event, context) => {
     const parameters = event?.pathParameters;
     const team = parameters?.team;
     const driverId = parameters?.driverId;
+    const language = event?.queryStringParameters?.language;
 
+    // Input validation
     if (!team || !driverId) {
       return {
-        statusCode: 404,
+        statusCode: 400,
         headers: {
           "content-type": "application/json",
         },
@@ -22,6 +26,7 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
+    // Fetch the driver from DynamoDB
     const commandOutput = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.TABLE_NAME,
@@ -29,6 +34,7 @@ export const handler: Handler = async (event, context) => {
       })
     );
     console.log("GetCommand response: ", commandOutput);
+
     if (!commandOutput.Item) {
       return {
         statusCode: 404,
@@ -38,9 +44,20 @@ export const handler: Handler = async (event, context) => {
         body: JSON.stringify({ Message: "Driver not found" }),
       };
     }
-    const body = {
-      data: commandOutput.Item,
-    };
+
+    const driver = commandOutput.Item;
+
+    // Translate the description if a language is provided
+    if (language) {
+      const translateParams = {
+        Text: driver.description,
+        SourceLanguageCode: "auto", // Automatically detect the source language
+        TargetLanguageCode: language.toUpperCase(), // Target language
+      };
+
+      const translation = await translateClient.send(new TranslateTextCommand(translateParams));
+      driver.translatedDescription = translation.TranslatedText;
+    }
 
     // Return Response
     return {
@@ -48,10 +65,10 @@ export const handler: Handler = async (event, context) => {
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ data: driver }),
     };
   } catch (error: any) {
-    console.log(JSON.stringify(error));
+    console.error("Error:", error);
     return {
       statusCode: 500,
       headers: {

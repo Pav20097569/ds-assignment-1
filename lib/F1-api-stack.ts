@@ -26,10 +26,8 @@ export class F1ApiStack extends cdk.Stack {
     const getDriverByIdFn = new lambdanode.NodejsFunction(this, "GetDriverByIdFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/getDriverById.ts`, // Specify the entry file
-      bundling: {
-        forceDockerBundling: false, // Disable Docker bundling
-      },
+      entry: `${__dirname}/../lambdas/getDriverById.ts`,
+      bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
         REGION: "eu-west-1",
@@ -39,10 +37,8 @@ export class F1ApiStack extends cdk.Stack {
     const getAllDriversFn = new lambdanode.NodejsFunction(this, "GetAllDriversFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/getAllDrivers.ts`, // Specify the entry file
-      bundling: {
-        forceDockerBundling: false, // Disable Docker bundling
-      },
+      entry: `${__dirname}/../lambdas/getAllDrivers.ts`,
+      bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
         REGION: "eu-west-1",
@@ -52,10 +48,8 @@ export class F1ApiStack extends cdk.Stack {
     const addDriverFn = new lambdanode.NodejsFunction(this, "AddDriverFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/addDriver.ts`, // Specify the entry file
-      bundling: {
-        forceDockerBundling: false, // Disable Docker bundling
-      },
+      entry: `${__dirname}/../lambdas/addDriver.ts`,
+      bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
         REGION: "eu-west-1",
@@ -65,36 +59,29 @@ export class F1ApiStack extends cdk.Stack {
     const getDriversByTeamFn = new lambdanode.NodejsFunction(this, "GetDriversByTeamFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/getDriversByTeam.ts`, // Specify the entry file
-      bundling: {
-        forceDockerBundling: false, // Disable Docker bundling
-      },
+      entry: `${__dirname}/../lambdas/getDriversByTeam.ts`,
+      bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
         REGION: "eu-west-1",
       },
     });
-
 
     const updateDriverFn = new lambdanode.NodejsFunction(this, "UpdateDriverFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/updateDriver.ts`, // Specify the entry file
-      bundling: {
-        forceDockerBundling: false, // Disable Docker bundling
-      },
+      entry: `${__dirname}/../lambdas/updateDriver.ts`,
+      bundling: { forceDockerBundling: false },
       environment: {
         TABLE_NAME: driversTable.tableName,
         REGION: "eu-west-1",
       },
     });
-    
 
     // API Gateway
     const api = new apigateway.RestApi(this, "F1Api", {
       restApiName: "Formula 1 API",
       description: "API for managing Formula 1 drivers and teams.",
-      
     });
 
     // Add the /drivers resource
@@ -110,10 +97,13 @@ export class F1ApiStack extends cdk.Stack {
     driversResource.addMethod("GET", new apigateway.LambdaIntegration(getAllDriversFn));
     driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn));
     driversByTeamResource.addMethod("GET", new apigateway.LambdaIntegration(getDriversByTeamFn));
-    driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn));
+    driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn), {
+      requestParameters: {
+        "method.request.querystring.language": false, // Optional query parameter
+      },
+    });
     driverResource.addMethod("PUT", new apigateway.LambdaIntegration(updateDriverFn));
 
-    
     // Seed Data for DynamoDB Table
     new custom.AwsCustomResource(this, "DriversDDBInitData", {
       onCreate: {
@@ -137,6 +127,16 @@ export class F1ApiStack extends cdk.Stack {
     driversTable.grantWriteData(addDriverFn);
     driversTable.grantReadData(getDriversByTeamFn);
     driversTable.grantWriteData(updateDriverFn);
+
+    // Grant the Lambda function permission to use AWS Translate and Comprehend
+    const translatePolicy = new iam.PolicyStatement({
+      actions: [
+        "translate:TranslateText",
+        "comprehend:DetectDominantLanguage", // Add this permission
+      ],
+      resources: ["*"], // Consider restricting this to specific resources if possible
+    });
+    getDriverByIdFn.addToRolePolicy(translatePolicy);
 
     // Output the API Gateway URL
     new cdk.CfnOutput(this, "ApiUrl", {
