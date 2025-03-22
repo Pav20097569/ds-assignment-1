@@ -33,53 +33,7 @@ export class F1ApiStack extends cdk.Stack {
       },
     });
 
-    const getDriversByTeamFn = new lambdanode.NodejsFunction(this, "GetDriversByTeamFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/getDriversByTeam.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
-      },
-    });
 
-    const addDriverFn = new lambdanode.NodejsFunction(this, "AddDriverFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/addDriver.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
-      },
-    });
-
-    const updateDriverFn = new lambdanode.NodejsFunction(this, "UpdateDriverFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/updateDriver.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
-      },
-    });
-
-    const translateDescriptionFn = new lambdanode.NodejsFunction(this, "TranslateDescriptionFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/translateDescription.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        TABLE_NAME: driversTable.tableName,
-        REGION: "eu-west-1",
-      },
-    });
 
     // Seed Data for DynamoDB Table
     new custom.AwsCustomResource(this, "DriversDDBInitData", {
@@ -100,9 +54,6 @@ export class F1ApiStack extends cdk.Stack {
 
     // Permissions
     driversTable.grantReadData(getDriverByIdFn);
-    driversTable.grantReadData(getDriversByTeamFn);
-    driversTable.grantWriteData(addDriverFn);
-    driversTable.grantWriteData(updateDriverFn);
-    driversTable.grantReadWriteData(translateDescriptionFn);
+
   }
 }
