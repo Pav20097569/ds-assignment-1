@@ -4,6 +4,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as custom from "aws-cdk-lib/custom-resources";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 import { generateBatch } from "../shared/util";
 import { drivers } from "../seed/drivers";
@@ -74,6 +75,21 @@ export class F1ApiStack extends cdk.Stack {
       },
     });
 
+
+    const updateDriverFn = new lambdanode.NodejsFunction(this, "UpdateDriverFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/updateDriver.ts`, // Specify the entry file
+      bundling: {
+        forceDockerBundling: false, // Disable Docker bundling
+      },
+      environment: {
+        TABLE_NAME: driversTable.tableName,
+        REGION: "eu-west-1",
+      },
+    });
+    
+
     // API Gateway
     const api = new apigateway.RestApi(this, "F1Api", {
       restApiName: "Formula 1 API",
@@ -95,6 +111,7 @@ export class F1ApiStack extends cdk.Stack {
     driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn));
     driversByTeamResource.addMethod("GET", new apigateway.LambdaIntegration(getDriversByTeamFn));
     driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn));
+    driverResource.addMethod("PUT", new apigateway.LambdaIntegration(updateDriverFn));
 
     
     // Seed Data for DynamoDB Table
@@ -119,6 +136,8 @@ export class F1ApiStack extends cdk.Stack {
     driversTable.grantReadData(getAllDriversFn);
     driversTable.grantWriteData(addDriverFn);
     driversTable.grantReadData(getDriversByTeamFn);
+    driversTable.grantWriteData(updateDriverFn);
+
     // Output the API Gateway URL
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
