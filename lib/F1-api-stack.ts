@@ -78,22 +78,25 @@ export class F1ApiStack extends cdk.Stack {
     const api = new apigateway.RestApi(this, "F1Api", {
       restApiName: "Formula 1 API",
       description: "API for managing Formula 1 drivers and teams.",
+      
     });
 
-// Add the /drivers resource
-const driversResource = api.root.addResource("drivers");
+    // Add the /drivers resource
+    const driversResource = api.root.addResource("drivers");
 
-// Add the /drivers/{team} resource
-const driversByTeamResource = driversResource.addResource("{team}");
+    // Add the /drivers/{team} resource
+    const driversByTeamResource = driversResource.addResource("{team}");
 
-// Add the /drivers/{team}/{driverId} resource
-const driverResource = driversByTeamResource.addResource("{driverId}");
+    // Add the /drivers/{team}/{driverId} resource
+    const driverResource = driversByTeamResource.addResource("{driverId}");
 
-// Add methods to the resources
-driversResource.addMethod("GET", new apigateway.LambdaIntegration(getAllDriversFn));
-driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn));
-driversByTeamResource.addMethod("GET", new apigateway.LambdaIntegration(getDriversByTeamFn));
-driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn));
+    // Add methods to the resources
+    driversResource.addMethod("GET", new apigateway.LambdaIntegration(getAllDriversFn));
+    driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn));
+    driversByTeamResource.addMethod("GET", new apigateway.LambdaIntegration(getDriversByTeamFn));
+    driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn));
+
+    
     // Seed Data for DynamoDB Table
     new custom.AwsCustomResource(this, "DriversDDBInitData", {
       onCreate: {

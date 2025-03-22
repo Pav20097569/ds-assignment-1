@@ -16,6 +16,11 @@ export const handler = async (
     };
   }
 
+  // Parse query parameters
+  const isActive = event.queryStringParameters?.isActive;
+  const nationality = event.queryStringParameters?.nationality;
+
+  // Build the DynamoDB query parameters
   const params = {
     TableName: process.env.TABLE_NAME,
     KeyConditionExpression: "team = :team",
@@ -26,7 +31,16 @@ export const handler = async (
 
   try {
     const data = await client.send(new QueryCommand(params));
-    const drivers = data.Items?.map((item) => unmarshall(item)) || [];
+    let drivers = data.Items?.map((item) => unmarshall(item)) || [];
+
+    // Apply filters based on query parameters
+    if (isActive !== undefined) {
+      drivers = drivers.filter((driver) => driver.isActive === (isActive === "true"));
+    }
+    if (nationality) {
+      drivers = drivers.filter((driver) => driver.nationality === nationality);
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify(drivers),
