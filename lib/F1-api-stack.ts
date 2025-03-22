@@ -5,12 +5,14 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as custom from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as cognito from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 import { generateBatch } from "../shared/util";
 import { drivers } from "../seed/drivers";
 
 export class F1ApiStack extends cdk.Stack {
+  public readonly api: apigateway.RestApi;
+  public readonly apiKey: apigateway.ApiKey;
+
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
@@ -79,31 +81,40 @@ export class F1ApiStack extends cdk.Stack {
       },
     });
 
-    // Cognito User Pool for Authorization
-    const userPool = new cognito.UserPool(this, "F1ApiUserPool", {
-      selfSignUpEnabled: true, // Allow users to sign up
-      autoVerify: { email: true }, // Auto-verify email addresses
-      signInAliases: { email: true }, // Allow email as a sign-in alias
+    // Create the API Gateway RestApi
+    this.api = new apigateway.RestApi(this, "RestAPI", {
+      description: "Driver Management API",
+      deployOptions: {
+        stageName: "dev",
+      },
+      defaultCorsPreflightOptions: {
+        allowHeaders: ["Content-Type", "X-Amz-Date"],
+        allowMethods: ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        allowCredentials: true,
+        allowOrigins: ["*"],
+      },
     });
 
-    const userPoolClient = new cognito.UserPoolClient(this, "F1ApiUserPoolClient", {
-      userPool,
-      generateSecret: false, // Don't generate a client secret
+    // Create the API Key
+    this.apiKey = new apigateway.ApiKey(this, "DriversAPIKey", {
+      apiKeyName: "Drivers-API-Key",
+      description: "API Key for Driver API",
     });
 
-    // API Gateway Authorizer
-    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "F1ApiAuthorizer", {
-      cognitoUserPools: [userPool],
+    // Create the Usage Plan and associate it with the API Key
+    const usagePlan = new apigateway.UsagePlan(this, "DriversAPIUsagePlan", {
+      name: "Driver API Usage Plan",
+      apiStages: [
+        {
+          api: this.api,
+          stage: this.api.deploymentStage,
+        },
+      ],
     });
-
-    // API Gateway
-    const api = new apigateway.RestApi(this, "F1Api", {
-      restApiName: "Formula 1 API",
-      description: "API for managing Formula 1 drivers and teams.",
-    });
+    usagePlan.addApiKey(this.apiKey);
 
     // Add the /drivers resource
-    const driversResource = api.root.addResource("drivers");
+    const driversResource = this.api.root.addResource("drivers");
 
     // Add the /drivers/{team} resource
     const driversByTeamResource = driversResource.addResource("{team}");
@@ -114,8 +125,7 @@ export class F1ApiStack extends cdk.Stack {
     // Add methods to the resources
     driversResource.addMethod("GET", new apigateway.LambdaIntegration(getAllDriversFn));
     driversResource.addMethod("POST", new apigateway.LambdaIntegration(addDriverFn), {
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizer,
+      apiKeyRequired: true,
     });
     driversByTeamResource.addMethod("GET", new apigateway.LambdaIntegration(getDriversByTeamFn));
     driverResource.addMethod("GET", new apigateway.LambdaIntegration(getDriverByIdFn), {
@@ -124,8 +134,7 @@ export class F1ApiStack extends cdk.Stack {
       },
     });
     driverResource.addMethod("PUT", new apigateway.LambdaIntegration(updateDriverFn), {
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizer,
+      apiKeyRequired: true,
     });
 
     // Seed Data for DynamoDB Table
@@ -154,29 +163,15 @@ export class F1ApiStack extends cdk.Stack {
 
     // Grant the Lambda function permission to use AWS Translate and Comprehend
     const translatePolicy = new iam.PolicyStatement({
-      actions: [
-        "translate:TranslateText",
-        "comprehend:DetectDominantLanguage", // Add this permission
-      ],
-      resources: ["*"], // Consider restricting this to specific resources if possible
+      actions: ["translate:TranslateText", "comprehend:DetectDominantLanguage"],
+      resources: ["*"],
     });
     getDriverByIdFn.addToRolePolicy(translatePolicy);
 
     // Output the API Gateway URL
     new cdk.CfnOutput(this, "ApiUrl", {
-      value: api.url,
+      value: this.api.url,
       description: "The URL of the API Gateway endpoint",
-    });
-
-    // Output the Cognito User Pool ID and Client ID
-    new cdk.CfnOutput(this, "UserPoolId", {
-      value: userPool.userPoolId,
-      description: "The ID of the Cognito User Pool",
-    });
-
-    new cdk.CfnOutput(this, "UserPoolClientId", {
-      value: userPoolClient.userPoolClientId,
-      description: "The ID of the Cognito User Pool Client",
     });
   }
 }
